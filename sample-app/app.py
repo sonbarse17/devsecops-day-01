@@ -3,6 +3,8 @@ import sqlite3
 import logging
 import os
 import subprocess # nosec
+import requests
+import pickle # nosec
 from flasgger import Swagger
 
 app = Flask(__name__)
@@ -95,6 +97,34 @@ def ping():
     # Intentional Flaw 2b: Command Injection (Fixed)
     result = subprocess.run(["ping", "-c", "1", ip], capture_output=True, text=True).stdout # nosec
     return jsonify({"result": result})
+
+# --- CODEQL VULNERABILITIES BELOW ---
+
+@app.route('/fetch_url', methods=['GET'])
+def fetch_url():
+    """
+    CodeQL Vuln 1: Server-Side Request Forgery (SSRF)
+    """
+    url = request.args.get('url')
+    if not url:
+        return "Please provide a URL", 400
+    
+    # Intentional Flaw 4: SSRF (Fetching unvalidated user-provided URL)
+    resp = requests.get(url, timeout=5) # nosec
+    return jsonify({"content": resp.text[:100]})
+
+@app.route('/load_data', methods=['POST'])
+def load_data():
+    """
+    CodeQL Vuln 2: Insecure Deserialization
+    """
+    data = request.data
+    if not data:
+        return "No data provided", 400
+        
+    # Intentional Flaw 5: Insecure Deserialization (Unpickling untrusted user data)
+    obj = pickle.loads(data) # nosec
+    return jsonify({"status": "Data loaded"})
 
 if __name__ == '__main__':
     init_db()
