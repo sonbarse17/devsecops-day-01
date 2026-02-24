@@ -48,7 +48,6 @@ jobs:
       - name: Install Pip-Audit
         run: pip install pip-audit
       - name: Run SCA Scan
-        # This will FAIL because of the vulnerable packages we injected in Task 5
         run: pip-audit -r sample-app/requirements.txt || exit 1
 
   # 4. IaC Security Scan (tfsec)
@@ -61,14 +60,11 @@ jobs:
         uses: aquasecurity/tfsec-action@v1.0.3
         with:
           working_directory: terraform/
-          # This will also FAIL because of the vulnerable bucket and security group from Task 4
-          # soft_fail: false ensures it formally breaks the build
 
   # 5. Policy Check & Deployment
   production-deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    # ENFORCE RULE: Deployment is ONLY allowed when ALL 4 security checks pass
     needs: [secret-scan, sast-scan, dependency-scan, iac-scan]
     if: success()
     steps:
