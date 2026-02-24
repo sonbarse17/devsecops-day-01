@@ -1,0 +1,78 @@
+name: "Master DevSecOps Pipeline"
+
+on:
+  push:
+    branches: [ "main", "feature/*" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # 1. Linting + Secret Detection (Gitleaks)
+  secret-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Code Linting & Secret Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 2. SAST Scan (Bandit)
+  sast-scan:
+    name: SAST Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install Bandit
+        run: pip install bandit
+      - name: Run Python SAST
+        run: bandit -r sample-app/
+
+  # 3. Dependency Vulnerability Scan (Pip-Audit)
+  dependency-scan:
+    name: Dependency Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install Pip-Audit
+        run: pip install pip-audit
+      - name: Run SCA Scan
+        # This will FAIL because of the vulnerable packages we injected in Task 5
+        run: pip-audit -r sample-app/requirements.txt || exit 1
+
+  # 4. IaC Security Scan (tfsec)
+  iac-scan:
+    name: IaC Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Terraform Security Scan
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: terraform/
+          # This will also FAIL because of the vulnerable bucket and security group from Task 4
+          # soft_fail: false ensures it formally breaks the build
+
+  # 5. Policy Check & Deployment
+  production-deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    # ENFORCE RULE: Deployment is ONLY allowed when ALL 4 security checks pass
+    needs: [secret-scan, sast-scan, dependency-scan, iac-scan]
+    if: success()
+    steps:
+      - name: Final Policy Check and Deployment
+        run: |
+          echo "All required DevSecOps security gates passed!"
+          echo "Deploying application to production server..."
